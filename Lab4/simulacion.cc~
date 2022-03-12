@@ -1,0 +1,183 @@
+/* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
+
+/*
+Practica 03 - Simulación de Redes
+Fecha: 24/10/17
+Alumnos: Daniel Conde Ortiz
+		 Miguel Ruiz Ramos
+
+Fichero: simulacion.cc
+Descripcion: Este fichero contiene la funcion main y la funcion simulacion, encargadas de configurar el sistema, generar las graficas y ejecutar la simulacion
+*/
+
+#include "ns3/object.h"
+#include "ns3/global-value.h"
+#include "ns3/core-module.h"
+#include "ns3/csma-module.h"
+#include "ns3/internet-module.h"
+#include "ns3/applications-module.h"
+#include "Observador.h"
+#include "ns3/point-to-point-module.h"
+#include "ns3/on-off-module.h"
+#include <ns3/gnuplot.h>
+
+using namespace ns3;
+#define NCSMA     9
+#define RETARDOB   "6560ns"
+#define RETARDOE   "6560ns"
+#define TASAB      "500Kb/s"
+#define TASAE      "500Kb/s"
+#define TAMANO    512
+#define TON			"1s"
+#define TOFF		"1s"
+#define STOP      "100s"
+#define RUN       "1s"
+#define TSTUDENT  2.0423
+#define INTERVALO "1s"
+
+NS_LOG_COMPONENT_DEFINE ("Simulacion");
+void simulacion (uint32_t nCsma, Time delayb, DataRate rateb, Time delaye, DataRate ratee, uint32_t packetSize, Time tstop, Time tstart, std::string interval);
+
+int
+main (int argc, char *argv[])
+{
+	//Se establece la resolucion en nano segundos
+	Time::SetResolution (Time::NS);
+
+	GlobalValue::Bind ("ChecksumEnabled", BooleanValue(true));
+	
+	//Se establecen los valores por defecto para las variables
+	uint32_t    nCsma = NCSMA;	 
+	Time        delayb (RETARDOB);
+		Time        delaye (RETARDOE);
+	DataRate    rateb (TASAB);
+		DataRate    ratee (TASAE);
+	uint32_t    packetSize = TAMANO;
+	Time        tstop (STOP);
+	Time        tstart (RUN);
+	std::string interval (INTERVALO);
+
+	//Para configurar los valores de las variables mediante linea de comandos
+	CommandLine cmd;
+
+/*
+	cmd.AddValue ("ton", "tiempo del periodo en on", ton);
+	cmd.AddValue ("toff", "tiempo del periodo en off", toff);
+	cmd.AddValue ("tamPqt", "tamano de las SDU de aplicacion", packetSize);
+	cmd.AddValue ("tasaEnvio", "tasa de bits en el estado activo", ratee);
+*/
+
+/*
+	cmd.AddValue ("nCsma", "número de nodos en el bus", nCsma);
+	cmd.AddValue ("retardoBus", "retardo de propagación en el bus", delayb);
+	cmd.AddValue ("capacidadBus", "capacidad del bus", rateb);
+		cmd.AddValue ("retardoEn", "retardo de propagación en el enlace P2P", delaye);
+	cmd.AddValue ("capacidadEn", "capacidad del enlace P2P", ratee);
+
+	cmd.AddValue ("tamPaquete", "tamano de las SDU de aplicacion", packetSize);
+	cmd.AddValue ("intervalo", "tiempo entre dos paquetes consecutivos enviados por el mismo cliente", interval);
+	cmd.AddValue ("tstart", "instante de simulacion de inicio de las aplicaciones cliente", tstart);
+	cmd.AddValue ("tstop", "intante de simulacion de fin de aplicaciones cliente y del servidor", tstop);
+*/
+	cmd.Parse (argc, argv);
+
+   // Debemos garantizar qu hay al menos un cliente y el servidor.
+	if (nCsma <= 1)
+		nCsma = 2;
+
+	simulacion(nCsma, delayb, rateb, delaye, ratee, packetSize, tstop, tstart, interval);						
+
+
+	return 0;
+}
+
+//Funcion encargada de configurar el escenario y ejecutar la simulación.
+void simulacion (uint32_t nCsma, Time delayb, DataRate rateb, Time delaye, DataRate ratee, uint32_t packetSize, Time tstop, Time tstart, std::string interval)
+{
+	// Aquí empieza el escenario
+	
+
+// Nodos que pertenecen al enlace punto a punto
+NodeContainer nodosP2P;
+nodosP2P.Create (2);
+
+// Nodos que pertenecen a la red de área local
+// Como primer nodo añadimos el encaminador que proporciona acceso
+// al enlace punto a punto.
+NodeContainer nodosCsma;
+nodosCsma.Add (nodosP2P.Get (1));
+nodosCsma.Create (nCsma-1);
+
+	CsmaHelper csma;
+	csma.SetChannelAttribute ("DataRate", DataRateValue(rateb));
+	csma.SetChannelAttribute ("Delay", TimeValue (delayb));
+
+	NetDeviceContainer csmaDevices;
+	csmaDevices = csma.Install (nodosCsma);
+	
+	PointToPointHelper p2p;
+	//p2p.SetChannelAttribute("DataRate",DataRateValue(ratee));
+	p2p.SetChannelAttribute("Delay",TimeValue (delaye));
+	p2p.SetDeviceAttribute("DataRate", DataRateValue(ratee));
+	
+	NetDeviceContainer p2pDevices;
+	p2pDevices = p2p.Install(nodosP2P); 
+
+   // Instalamos la pila TCP/IP en todos los nodos
+	InternetStackHelper stack;
+	stack.Install (nodosCsma);
+	stack.Install (nodosP2P);
+   // Y les asignamos direcciones
+	Ipv4AddressHelper address;
+	address.SetBase ("10.1.2.0", "255.255.255.0");
+	Ipv4InterfaceContainer csmaInterfaces = address.Assign (csmaDevices);
+   // Cálculo de rutas
+	Ipv4GlobalRoutingHelper::PopulateRoutingTables ();
+
+   //Configuramos el tráfico
+   /////////// Instalación de las aplicaciones
+
+OnOffHelper 
+
+
+/*
+	
+   // Servidor en el último nodo
+	UdpEchoServerHelper echoServer (9);
+	ApplicationContainer serverApp = echoServer.Install (nodosCsma.Get (nCsma - 1));
+	serverApp.Start (Seconds(0.0));
+	serverApp.Stop (tstop);
+   // Clientes: en todos los nodos menos en el último
+	UdpEchoClientHelper echoClient (csmaInterfaces.GetAddress (nCsma - 1), 9);
+	echoClient.SetAttribute ("MaxPackets", UintegerValue (10000));
+	echoClient.SetAttribute ("Interval", TimeValue (Time (interval)));
+	echoClient.SetAttribute ("PacketSize", UintegerValue (packetSize));
+	NodeContainer clientes;
+	for (uint32_t i = 0; i < nCsma - 1; i++)
+		clientes.Add (nodosCsma.Get (i));
+	ApplicationContainer clientApps = echoClient.Install (clientes);
+	clientApps.Start (tstart);
+	clientApps.Stop (tstop);
+*/
+
+   //////////Aquí empieza la parte de análisis
+   // Paquetes desde el punto de vista del servidor
+	csma.EnablePcap ("p03_servidor", csmaDevices.Get (nCsma - 1), true);
+
+
+	Observador   servidor (csmaDevices.Get (nCsma -1)->GetObject<CsmaNetDevice> ());
+	Observador * observadores[nCsma - 1];
+	for (uint32_t i = 0; i < nCsma -1 ; i++)
+	{
+		observadores[i] = new Observador (csmaDevices.Get (i)->GetObject<CsmaNetDevice> ());
+	}
+
+	observadores[0]->GetPaqPerdidos();
+   // Lanzamos la simulacion
+	Simulator::Run ();
+
+   // Finalizamos el proceso de simulacion
+	Simulator::Destroy ();
+
+
+}
